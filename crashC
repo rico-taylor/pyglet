@@ -1,0 +1,24 @@
+import pyglet
+from pyglet import shapes
+
+window = pyglet.window.Window(width=1280, height=720, caption="Hello Pyglet")
+window.set_location(400,200)
+
+circle = shapes.Circle(x=700, y=150, radius=100, color=(50, 225, 30))
+
+square = shapes.Rectangle(x=200, y=200, width=200, height=200, color=(55,55,255))
+
+rectangle = shapes.Rectangle(x=250, y=300, width=400, height=200, color=(255, 22, 20))
+rectangle.opacity = 100
+rectangle.rotation = 33
+
+@window.event
+def on_draw() -> None:
+  window.clear()
+  circle.draw()
+  square.draw()
+  rectangle.draw()
+
+
+
+pyglet.app.run()
