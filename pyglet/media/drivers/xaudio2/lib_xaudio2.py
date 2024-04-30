@@ -192,60 +192,20 @@ XAUDIO2_NO_VIRTUAL_AUDIO_CLIENT = 0x10000   # Used in CreateMasteringVoice to cr
 class IXAudio2VoiceCallback(com.Interface):
     _methods_ = [
         ('OnVoiceProcessingPassStart',
-         com.STDMETHOD(UINT32)),
+         com.VOIDMETHOD(UINT32)),
         ('OnVoiceProcessingPassEnd',
-         com.STDMETHOD()),
-        ('onStreamEnd',
-         com.STDMETHOD()),
-        ('onBufferStart',
-         com.STDMETHOD(ctypes.c_void_p)),
+         com.VOIDMETHOD()),
+        ('OnStreamEnd',
+         com.VOIDMETHOD()),
+        ('OnBufferStart',
+         com.VOIDMETHOD(ctypes.c_void_p)),
         ('OnBufferEnd',
-         com.STDMETHOD(ctypes.c_void_p)),
+         com.VOIDMETHOD(ctypes.c_void_p)),
         ('OnLoopEnd',
-         com.STDMETHOD(ctypes.c_void_p)),
+         com.VOIDMETHOD(ctypes.c_void_p)),
+        ('OnVoiceError',
+         com.VOIDMETHOD(ctypes.c_void_p, HRESULT))
     ]
-
-
-class XA2SourceCallback(com.COMObject):
-    """Callback class used to trigger when buffers or streams end..
-           WARNING: Whenever a callback is running, XAudio2 cannot generate audio.
-           Make sure these functions run as fast as possible and do not block/delay more than a few milliseconds.
-           MS Recommendation:
-           At a minimum, callback functions must not do the following:
-                - Access the hard disk or other permanent storage
-                - Make expensive or blocking API calls
-                - Synchronize with other parts of client code
-                - Require significant CPU usage
-    """
-    _interfaces_ = [IXAudio2VoiceCallback]
-
-    def __init__(self, xa2_player):
-        self.xa2_player = xa2_player
-
-    def OnVoiceProcessingPassStart(self, bytesRequired):
-        pass
-
-    def OnVoiceProcessingPassEnd(self):
-        pass
-
-    def onStreamEnd(self):
-        pass
-
-    def onBufferStart(self, pBufferContext):
-        pass
-
-    def OnBufferEnd(self, pBufferContext):
-        """At the end of playing one buffer, attempt to refill again.
-        Even if the player is out of sources, it needs to be called to purge all buffers.
-        """
-        if self.xa2_player:
-            self.xa2_player.refill_source_player()
-
-    def OnLoopEnd(self, this, pBufferContext):
-        pass
-
-    def onVoiceError(self, this, pBufferContext, hresult):
-        raise Exception("Error occurred during audio playback.", hresult)
 
 
 class XAUDIO2_EFFECT_DESCRIPTOR(Structure):
@@ -283,43 +243,43 @@ class XAUDIO2_VOICE_DETAILS(Structure):
 class IXAudio2Voice(com.pInterface):
     _methods_ = [
         ('GetVoiceDetails',
-         com.STDMETHOD(POINTER(XAUDIO2_VOICE_DETAILS))),
+         com.VOIDMETHOD(POINTER(XAUDIO2_VOICE_DETAILS))),
         ('SetOutputVoices',
-         com.STDMETHOD()),
+         com.STDMETHOD(POINTER(XAUDIO2_VOICE_SENDS))),
         ('SetEffectChain',
          com.STDMETHOD(POINTER(XAUDIO2_EFFECT_CHAIN))),
         ('EnableEffect',
-         com.STDMETHOD()),
+         com.STDMETHOD(UINT32, UINT32)),
         ('DisableEffect',
-         com.STDMETHOD()),
+         com.STDMETHOD(UINT32, UINT32)),
         ('GetEffectState',
-         com.STDMETHOD()),
+         com.VOIDMETHOD(UINT32, POINTER(BOOL))),
         ('SetEffectParameters',
-         com.STDMETHOD()),
+         com.STDMETHOD(UINT32, c_void_p, UINT32, UINT32)),
         ('GetEffectParameters',
-         com.STDMETHOD()),
+         com.VOIDMETHOD(UINT32, POINTER(BOOL))),
         ('SetFilterParameters',
          com.STDMETHOD(POINTER(XAUDIO2_FILTER_PARAMETERS), UINT32)),
         ('GetFilterParameters',
-         com.STDMETHOD()),
+         com.VOIDMETHOD(POINTER(XAUDIO2_FILTER_PARAMETERS))),
         ('SetOutputFilterParameters',
-         com.STDMETHOD()),
+         com.STDMETHOD(c_void_p, POINTER(XAUDIO2_FILTER_PARAMETERS), UINT32)),
         ('GetOutputFilterParameters',
-         com.STDMETHOD()),
+         com.VOIDMETHOD(c_void_p, POINTER(XAUDIO2_FILTER_PARAMETERS))),
         ('SetVolume',
-         com.STDMETHOD(ctypes.c_float, UINT32)),
+         com.STDMETHOD(c_float, UINT32)),
         ('GetVolume',
-         com.STDMETHOD(POINTER(c_float))),
+         com.VOIDMETHOD(POINTER(c_float))),
         ('SetChannelVolumes',
-         com.STDMETHOD()),
+         com.STDMETHOD(UINT32, POINTER(c_float), UINT32)),
         ('GetChannelVolumes',
-         com.STDMETHOD()),
+         com.VOIDMETHOD(UINT32, POINTER(c_float))),
         ('SetOutputMatrix',
-         com.STDMETHOD(c_void_p, UINT32, UINT32, POINTER(FLOAT), UINT32)),
+         com.STDMETHOD(c_void_p, UINT32, UINT32, POINTER(c_float), UINT32)),
         ('GetOutputMatrix',
-         com.STDMETHOD()),
+         com.STDMETHOD(c_void_p, UINT32, UINT32, POINTER(c_float))),
         ('DestroyVoice',
-         com.STDMETHOD())
+         com.VOIDMETHOD())
     ]
 
 
@@ -340,15 +300,15 @@ class IXAudio2SourceVoice(IXAudio2Voice):
         ('Discontinuity',
          com.STDMETHOD()),
         ('ExitLoop',
-         com.STDMETHOD()),
+         com.STDMETHOD(UINT32)),
         ('GetState',
-         com.STDMETHOD(POINTER(XAUDIO2_VOICE_STATE), UINT32)),
+         com.VOIDMETHOD(POINTER(XAUDIO2_VOICE_STATE), UINT32)),
         ('SetFrequencyRatio',
-         com.STDMETHOD(FLOAT, UINT32)),
+         com.STDMETHOD(c_float, UINT32)),
         ('GetFrequencyRatio',
-         com.STDMETHOD(POINTER(c_float))),
+         com.VOIDMETHOD(POINTER(c_float))),
         ('SetSourceSampleRate',
-         com.STDMETHOD()),
+         com.STDMETHOD(UINT32)),
     ]
 
 
@@ -362,26 +322,12 @@ class IXAudio2MasteringVoice(IXAudio2Voice):
 class IXAudio2EngineCallback(com.Interface):
     _methods_ = [
         ('OnProcessingPassStart',
-         com.METHOD(ctypes.c_void_p)),
+         com.VOIDMETHOD()),
         ('OnProcessingPassEnd',
-         com.METHOD(ctypes.c_void_p)),
+         com.VOIDMETHOD()),
         ('OnCriticalError',
-         com.METHOD(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong)),
+         com.VOIDMETHOD(HRESULT)),
     ]
-
-
-class XA2EngineCallback(com.COMObject):
-    _interfaces_ = [IXAudio2EngineCallback]
-
-    def OnProcessingPassStart(self):
-        pass
-
-    def OnProcessingPassEnd(self):
-        pass
-
-    def OnCriticalError(self, this, hresult):
-        raise Exception("Critical Error:", hresult)
-
 
 
 # -------------- 3D Audio Positioning----------
@@ -645,7 +591,7 @@ class IXAudio2(com.pIUnknown):
         ('RegisterForCallbacks',
            com.STDMETHOD(POINTER(IXAudio2EngineCallback))),
         ('UnregisterForCallbacks',
-           com.METHOD(ctypes.c_void_p, POINTER(IXAudio2EngineCallback))),
+           com.VOIDMETHOD(POINTER(IXAudio2EngineCallback))),
         ('CreateSourceVoice',
          com.STDMETHOD(POINTER(IXAudio2SourceVoice), POINTER(WAVEFORMATEX), UINT32, c_float,
                        POINTER(IXAudio2VoiceCallback), POINTER(XAUDIO2_VOICE_SENDS), POINTER(XAUDIO2_EFFECT_CHAIN))),
@@ -658,13 +604,13 @@ class IXAudio2(com.pIUnknown):
         ('StartEngine',
          com.STDMETHOD()),
         ('StopEngine',
-         com.STDMETHOD()),
+         com.VOIDMETHOD()),
         ('CommitChanges',
          com.STDMETHOD(UINT32)),
         ('GetPerformanceData',
-         com.METHOD(c_void, POINTER(XAUDIO2_PERFORMANCE_DATA))),
+         com.VOIDMETHOD(POINTER(XAUDIO2_PERFORMANCE_DATA))),
         ('SetDebugConfiguration',
-         com.STDMETHOD(POINTER(XAUDIO2_DEBUG_CONFIGURATION), c_void_p)),
+         com.VOIDMETHOD(POINTER(XAUDIO2_DEBUG_CONFIGURATION), c_void_p)),
     ]
 
 

@@ -15,6 +15,7 @@ pyglet.shapes
   .. autoattribute:: x
   .. autoattribute:: y
   .. autoattribute:: position
+  .. autoattribute:: rotation
   .. autoattribute:: anchor_x
   .. autoattribute:: anchor_y
   .. autoattribute:: anchor_position
@@ -30,7 +31,7 @@ pyglet.shapes
 
   .. autoattribute:: angle
   .. autoattribute:: start_angle
-  .. autoattribute:: rotation
+  .. autoattribute:: thickness
 
 
 .. autoclass:: BezierCurve
@@ -38,6 +39,7 @@ pyglet.shapes
 
   .. autoattribute:: points
   .. autoattribute:: t
+  .. autoattribute:: thickness
 
 
 .. autoclass:: Circle
@@ -51,7 +53,6 @@ pyglet.shapes
 
   .. autoattribute:: a
   .. autoattribute:: b
-  .. autoattribute:: rotation
 
 
 .. autoclass:: Sector
@@ -60,7 +61,6 @@ pyglet.shapes
   .. autoattribute:: angle
   .. autoattribute:: start_angle
   .. autoattribute:: radius
-  .. autoattribute:: rotation
 
 
 .. autoclass:: Line
@@ -75,7 +75,13 @@ pyglet.shapes
 
   .. autoattribute:: width
   .. autoattribute:: height
-  .. autoattribute:: rotation
+
+
+.. autoclass:: Box
+  :show-inheritance:
+
+  .. autoattribute:: width
+  .. autoattribute:: height
 
 
 .. autoclass:: BorderedRectangle
@@ -84,7 +90,6 @@ pyglet.shapes
   .. autoattribute:: width
   .. autoattribute:: height
   .. autoattribute:: border_color
-  .. autoattribute:: rotation
 
 
 .. autoclass:: Triangle
@@ -102,10 +107,13 @@ pyglet.shapes
   .. autoattribute:: outer_radius
   .. autoattribute:: inner_radius
   .. autoattribute:: num_spikes
-  .. autoattribute:: rotation
 
 
 .. autoclass:: Polygon
   :show-inheritance:
 
-  .. autoattribute:: rotation
+
+.. autoclass:: MultiLine
+  :show-inheritance:
+
+  .. autoattribute:: thickness

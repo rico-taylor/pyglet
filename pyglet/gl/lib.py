@@ -62,8 +62,7 @@ def errcheck(result, func, arguments):
             print(name)
 
     from pyglet import gl
-    context = gl.current_context
-    if not context:
+    if not gl.current_context:
         raise GLException('No GL context; create a Window first')
     error = gl.glGetError()
     if error:
@@ -84,6 +83,7 @@ def decorate_function(func, name):
     if _debug_gl:
         if name not in ('glGetError',) and name[:3] not in ('glX', 'agl', 'wgl'):
             func.errcheck = errcheck
+            func.__name__ = name
 
 
 link_AGL = None

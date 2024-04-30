@@ -1,4 +1,5 @@
 import pytest
+
 from tests.base.interactive import InteractiveTestCase
 
 from pyglet import app
@@ -24,24 +25,24 @@ Duis arcu eros, iaculis ut, vehicula in, elementum a, sapien. Phasellus ut tellu
 """
 
 
-class TestWindow(window.Window):
+class BaseTestWindow(window.Window):
     def __init__(self, *args, **kwargs):
-        super(TestWindow, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.batch = graphics.Batch()
         self.document = text.decode_text(doctext)
         self.margin = 2
         self.layout = layout.IncrementalTextLayout(self.document,
-            self.width - self.margin * 2, self.height - self.margin * 2,
-            multiline=True,
-            batch=self.batch)
+                                                   self.width - self.margin * 2, self.height - self.margin * 2,
+                                                   multiline=True,
+                                                   batch=self.batch)
         self.caret = caret.Caret(self.layout)
         self.push_handlers(self.caret)
 
         self.set_mouse_cursor(self.get_system_mouse_cursor('text'))
 
     def on_resize(self, width, height):
-        super(TestWindow, self).on_resize(width, height)
+        super().on_resize(width, height)
         self.layout.begin_update()
         self.layout.x = self.margin
         self.layout.y = self.margin
@@ -59,7 +60,7 @@ class TestWindow(window.Window):
         self.batch.draw()
 
     def on_key_press(self, symbol, modifiers):
-        super(TestWindow, self).on_key_press(symbol, modifiers)
+        super().on_key_press(symbol, modifiers)
         if symbol == key.TAB:
             self.caret.on_text('\t')
 
@@ -74,7 +75,7 @@ class PlainTextTestCase(InteractiveTestCase):
     Press ESC to exit the test.
     """
     def test_plain(self):
-        self.window = TestWindow(resizable=True, visible=False)
+        self.window = BaseTestWindow(resizable=True, visible=False)
         self.window.set_visible()
         app.run()
         self.user_verify('Pass test?', take_screenshot=False)

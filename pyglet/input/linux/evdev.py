@@ -4,7 +4,6 @@ import fcntl
 import ctypes
 import warnings
 
-from os import readv
 from ctypes import c_uint16 as _u16
 from ctypes import c_int16 as _s16
 from ctypes import c_uint32 as _u32
@@ -21,6 +20,15 @@ from pyglet.app.xlib import XlibSelectDevice
 from pyglet.input.base import Device, RelativeAxis, AbsoluteAxis, Button, Joystick, Controller
 from pyglet.input.base import DeviceOpenException, ControllerManager
 from pyglet.input.controller import get_mapping, Relation, create_guid
+
+try:
+    from os import readv as _os_readv
+except ImportError:
+    # Workaround for missing os.readv in PyPy
+    c = pyglet.lib.load_library('c')
+
+    def _os_readv(fd, buffers):
+        return c.read(fd, buffers, 3072)
 
 _IOC_NRBITS = 8
 _IOC_TYPEBITS = 8
@@ -408,7 +416,7 @@ class EvdevDevice(XlibSelectDevice, Device):
             return
 
         try:
-            bytes_read = readv(self._fileno, self._event_buffer)
+            bytes_read = _os_readv(self._fileno, self._event_buffer)
         except OSError:
             self.close()
             return
@@ -431,6 +439,8 @@ class FFController(Controller):
     _strong_effect = None
     _play_strong_event = None
     _stop_strong_event = None
+
+    device: EvdevDevice
 
     def open(self, window=None, exclusive=False):
         super().open(window, exclusive)
@@ -535,6 +545,8 @@ class EvdevControllerManager(ControllerManager, XlibSelectDevice):
         self._device_names = new_device_files
 
         for name in appeared:
+            # The endpoints can take a moment to become readable after they
+            # appear, so set a retry count of '10' rather than arbitray wait time
             future = self._thread_pool.submit(self._make_device, name, count=10)
             future.add_done_callback(self._make_device_callback)
 

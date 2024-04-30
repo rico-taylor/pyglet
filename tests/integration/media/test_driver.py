@@ -1,37 +1,51 @@
 """Test a specific audio driver for platform. Only checks the use of the
 interface. Any playback is silent."""
+import time
 
 import pytest
-import time
+
+from ...annotations import skip_if_continuous_integration, require_platform, Platform
 
 import pyglet
 _debug = False
 pyglet.options['debug_media'] = _debug
 pyglet.options['debug_media_buffers'] = _debug
 
-import pyglet.app
+from pyglet.media.player import PlaybackTimer
 from pyglet.media.synthesis import Silence
 
 from .mock_player import MockPlayer
 
 
-def _delete_driver():
-    # if hasattr(pyglet.media.drivers._audio_driver, 'delete'):
-    #     pyglet.media.drivers._audio_driver.delete()
-    pyglet.media.drivers._audio_driver = None
-
-def test_get_platform_driver():
-    driver = pyglet.media.drivers.get_audio_driver()
-    assert driver is not None
-    assert driver is not None, 'Cannot load audio driver for your platform'
-    _delete_driver()
+pytestmark = [skip_if_continuous_integration(), require_platform(Platform.WINDOWS)]
 
 
-class MockPlayerWithMockTime(MockPlayer):
+class _FakeDispatchEvent:
+    def dispatch_event(self, *_, **__):
+        pass
+
+
+class MockPlayerWithMockTime(MockPlayer, _FakeDispatchEvent):
+    volume = 1.0
+    min_distance = 1.0
+    max_distance = 100000000.
+
+    position = (0, 0, 0)
+    pitch = 1.0
+
+    cone_orientation = (0, 0, 1)
+    cone_inner_angle = 360.
+    cone_outer_angle = 360.
+    cone_outer_gain = 1.
+
+    def __init__(self, event_loop):
+        super().__init__(event_loop)
+        self.last_seek_time = 0.0
+        self.timer = PlaybackTimer()
 
     @property
     def time(self):
-        return 0
+        return self.timer.get_time()
 
 
 @pytest.fixture
@@ -44,8 +58,8 @@ class SilentTestSource(Silence):
         super().__init__(duration, frequency, sample_rate, envelope)
         self.bytes_read = 0
 
-    def get_audio_data(self, nbytes, compensation_time=0.0):
-        data = super(Silence, self).get_audio_data(nbytes, compensation_time)
+    def get_audio_data(self, nbytes):
+        data = super().get_audio_data(nbytes)
         if data is not None:
             self.bytes_read += data.length
         return data
@@ -59,25 +73,40 @@ def get_drivers():
     ids = []
 
     try:
+        from pyglet.media.drivers import silent
+        drivers.append(silent)
+        ids.append('Silent')
+    except ImportError:
+        pass
+
+    try:
         from pyglet.media.drivers import pulse
         drivers.append(pulse)
         ids.append('PulseAudio')
-    except:
+    except ImportError:
         pass
 
     try:
         from pyglet.media.drivers import openal
         drivers.append(openal)
         ids.append('OpenAL')
-    except:
+    except ImportError:
         pass
 
     try:
         from pyglet.media.drivers import directsound
         drivers.append(directsound)
         ids.append('DirectSound')
-    except:
+    except ImportError:
         pass
+
+    try:
+        from pyglet.media.drivers import xaudio2
+        drivers.append(xaudio2)
+        ids.append('XAudio2')
+    except ImportError:
+        pass
+
 
     return {'params': drivers, 'ids': ids}
 
@@ -111,14 +140,23 @@ def test_audio_player_clear(driver, player):
     audio_player = driver.create_audio_player(source, player)
     try:
         audio_player.play()
+        player.timer.start()
         player.wait(.5)
+
         assert 0. < audio_player.get_time() < 5.
 
         audio_player.stop()
+        player.timer.pause()
+
         source.seek(5.)
+        player.last_seek_time = 5.
+        player.timer.set_time(5.)
         audio_player.clear()
         audio_player.play()
+        player.timer.start()
+
         player.wait(.3)
+
         assert 5. <= audio_player.get_time() < 10.
 
     finally:
@@ -132,6 +170,7 @@ def test_audio_player_time(driver, player):
     audio_player = driver.create_audio_player(source, player)
     try:
         audio_player.play()
+        player.timer.start()
         last_time = audio_player.get_time()
         # Needs to run until at least the initial buffer is processed. Ideal time is 1 sec, so run
         # more than 1 sec.

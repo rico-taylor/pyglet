@@ -1,12 +1,23 @@
 """Holds type aliases used throughout the codebase."""
 import ctypes
+import sys
 
-from typing import Union
+from typing import Union, Literal
+
+
+if sys.version_info >= (3, 12):
+    from collections.abc import Buffer
+else:
+    # Best-effort placeholder for older Python versions
+    Buffer = Union[bytes, bytearray, memoryview, ctypes.Array]
+
+HorizontalAlign = Literal["left", "center", "right"]
+AnchorX = Literal["left", "center", "right"]
+AnchorY = Literal["top", "bottom", "center", "baseline"]
+ContentVAlign = Literal["left", "center", "top"]
+
 
 
 __all__ = [
-    "Buffer"
+    "Buffer", "HorizontalAlign", "AnchorX", "AnchorY", "ContentVAlign"
 ]
-
-# Backwards compatible placeholder for `collections.abc.Buffer` from Python 3.12
-Buffer = Union[bytes, bytearray, memoryview, ctypes.Array]

@@ -689,7 +689,7 @@ class ImageData(AbstractImage):
         :rtype: cls or cls.region_class
         """
         internalformat = self._get_internalformat(self._desired_format)
-        texture = cls.create(self.width, self.height, GL_TEXTURE_2D, internalformat, False, blank_data=False)
+        texture = cls.create(self.width, self.height, GL_TEXTURE_2D, internalformat, blank_data=False)
         if self.anchor_x or self.anchor_y:
             texture.anchor_x = self.anchor_x
             texture.anchor_y = self.anchor_y
@@ -1220,11 +1220,20 @@ class Texture(AbstractImage):
         self.id = tex_id
         self._context = pyglet.gl.current_context
 
+    def delete(self):
+        """Delete this texture and the memory it occupies.
+        After this, it may not be used anymore.
+        """
+        glDeleteTextures(1, GLuint(self.id))
+        self.id = None
+
     def __del__(self):
-        try:
-            self._context.delete_texture(self.id)
-        except Exception:
-            pass
+        if self.id is not None:
+            try:
+                self._context.delete_texture(self.id)
+                self.id = None
+            except (AttributeError, ImportError):
+                pass  # Interpreter is shutting down
 
     def bind(self, texture_unit: int = 0):
         """Bind to a specific Texture Unit by number."""
@@ -1479,8 +1488,13 @@ class TextureRegion(Texture):
         return "{}(id={}, size={}x{}, owner={}x{})".format(self.__class__.__name__, self.id, self.width, self.height,
                                                            self.owner.width, self.owner.height)
 
+    def delete(self):
+        """Deleting a TextureRegion has no effect. Operate on the owning
+        texture instead.
+        """
+        pass
+
     def __del__(self):
-        # only the owner Texture should handle deletion
         pass
 
 
@@ -1547,10 +1561,12 @@ class Texture3D(Texture, UniformTextureSequence):
 
     def __setitem__(self, index, value):
         if type(index) is slice:
+            glBindTexture(self.target, self.id)
+
             for item, image in zip(self[index], value):
                 image.blit_to_texture(self.target, self.level, image.anchor_x, image.anchor_y, item.z)
         else:
-            value.blit_to_texture(self.target, self.level, value.anchor_x, value.anchor_y, self[index].z)
+            self.blit_into(value, value.anchor_x, value.anchor_y, self[index].z)
 
     def __iter__(self):
         return iter(self.items)
@@ -1633,7 +1649,8 @@ class TextureArray(Texture, UniformTextureSequence):
         self._verify_size(image)
         start_length = len(self.items)
         item = self.region_class(0, 0, start_length, image.width, image.height, self)
-        image.blit_to_texture(self.target, self.level, image.anchor_x, image.anchor_y, start_length)
+
+        self.blit_into(image, image.anchor_x, image.anchor_y, start_length)
         self.items.append(item)
         return item
 
@@ -1641,6 +1658,8 @@ class TextureArray(Texture, UniformTextureSequence):
         """Allocates multiple images at once."""
         if len(self.items) + len(images) > self.max_depth:
             raise TextureArrayDepthExceeded("The amount of images being added exceeds the depth of this TextureArray.")
+
+        glBindTexture(self.target, self.id)
 
         start_length = len(self.items)
         for i, image in enumerate(images):
@@ -1665,6 +1684,8 @@ class TextureArray(Texture, UniformTextureSequence):
 
     def __setitem__(self, index, value):
         if type(index) is slice:
+            glBindTexture(self.target, self.id)
+
             for old_item, image in zip(self[index], value):
                 self._verify_size(image)
                 item = self.region_class(0, 0, old_item.z, image.width, image.height, self)
@@ -1673,7 +1694,7 @@ class TextureArray(Texture, UniformTextureSequence):
         else:
             self._verify_size(value)
             item = self.region_class(0, 0, index, value.width, value.height, self)
-            value.blit_to_texture(self.target, self.level, value.anchor_x, value.anchor_y, index)
+            self.blit_into(value, value.anchor_x, value.anchor_y, index)
             self.items[index] = item
 
     def __iter__(self):
@@ -1727,14 +1748,6 @@ class TileableTexture(Texture):
     def create_for_image(cls, image):
         image = image.get_image_data()
         return image.create_texture(cls)
-
-
-class DepthTexture(Texture):
-    """A texture with depth samples (typically 24-bit)."""
-
-    def blit_into(self, source, x, y, z):
-        glBindTexture(self.target, self.id)
-        source.blit_to_texture(self.level, x, y, z)
 
 
 class ImageGrid(AbstractImage, AbstractImageSequence):
@@ -1968,10 +1981,10 @@ class BufferManager:
     """
 
     def __init__(self):
-        self.color_buffer = None
-        self.depth_buffer = None
+        self._color_buffer = None
+        self._depth_buffer = None
         self.free_stencil_bits = None
-        self.refs = []
+        self._refs = []
 
     @staticmethod
     def get_viewport():
@@ -1992,11 +2005,11 @@ class BufferManager:
         viewport = self.get_viewport()
         viewport_width = viewport[2]
         viewport_height = viewport[3]
-        if (not self.color_buffer or
-                viewport_width != self.color_buffer.width or
-                viewport_height != self.color_buffer.height):
-            self.color_buffer = ColorBufferImage(*viewport)
-        return self.color_buffer
+        if (not self._color_buffer or
+                viewport_width != self._color_buffer.width or
+                viewport_height != self._color_buffer.height):
+            self._color_buffer = ColorBufferImage(*viewport)
+        return self._color_buffer
 
     def get_depth_buffer(self):
         """Get the depth buffer.
@@ -2006,11 +2019,11 @@ class BufferManager:
         viewport = self.get_viewport()
         viewport_width = viewport[2]
         viewport_height = viewport[3]
-        if (not self.depth_buffer or
-                viewport_width != self.depth_buffer.width or
-                viewport_height != self.depth_buffer.height):
-            self.depth_buffer = DepthBufferImage(*viewport)
-        return self.depth_buffer
+        if (not self._depth_buffer or
+                viewport_width != self._depth_buffer.width or
+                viewport_height != self._depth_buffer.height):
+            self._depth_buffer = DepthBufferImage(*viewport)
+        return self._depth_buffer
 
     def get_buffer_mask(self):
         """Get a free bitmask buffer.
@@ -2043,7 +2056,7 @@ class BufferManager:
         def release_buffer(ref, owner=self):
             owner.free_stencil_bits.insert(0, stencil_bit)
 
-        self.refs.append(weakref.ref(bufimg, release_buffer))
+        self._refs.append(weakref.ref(bufimg, release_buffer))
 
         return bufimg
 
@@ -2129,22 +2142,11 @@ class DepthBufferImage(BufferImage):
     """The depth buffer.
     """
     gl_format = GL_DEPTH_COMPONENT
-    format = 'L'
+    format = 'R'
 
     def get_texture(self, rectangle=False):
-        assert rectangle is False, 'Depth textures cannot be rectangular'
-
-        texture = DepthTexture.create(self.width, self.height, GL_TEXTURE_2D, None)
-        if self.anchor_x or self.anchor_y:
-            texture.anchor_x = self.anchor_x
-            texture.anchor_y = self.anchor_y
-
-        glReadBuffer(self.gl_buffer)
-        glCopyTexImage2D(texture.target, 0,
-                         GL_DEPTH_COMPONENT,
-                         self.x, self.y, self.width, self.height,
-                         0)
-        return texture
+        image_data = self.get_image_data()
+        return image_data.get_texture(rectangle)
 
     def blit_to_texture(self, target, level, x, y, z):
         glReadBuffer(self.gl_buffer)
@@ -2155,6 +2157,6 @@ class BufferImageMask(BufferImage):
     """A single bit of the stencil buffer.
     """
     gl_format = GL_STENCIL_INDEX
-    format = 'L'
+    format = 'R'
 
     # TODO mask methods

@@ -6,10 +6,10 @@ More information is available at http://www.pyglet.org
 import os
 import sys
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict
 
 #: The release version
-version = '2.0.9'
+version = '2.0.15'
 __version__ = version
 
 MIN_PYTHON_VERSION = 3, 8
@@ -31,8 +31,10 @@ _enable_optimisations = not __debug__
 if getattr(sys, 'frozen', None):
     _enable_optimisations = True
 
-#: Global dict of pyglet options.  To change an option from its default, you
-#: must import ``pyglet`` before any sub-packages.  For example::
+#: Global dict of pyglet options.
+#:
+#: To change an option from its default, you must import
+#: ``pyglet`` before any sub-packages.  For example::
 #:
 #:      import pyglet
 #:      pyglet.options['debug_gl'] = False
@@ -48,14 +50,21 @@ if getattr(sys, 'frozen', None):
 #: The non-development options are:
 #:
 #: audio
-#:     A sequence of the names of audio modules to attempt to load, in
-#:     order of preference.  Valid driver names are:
+#:     A :py:class:`~typing.Sequence` of valid audio modules names. They will
+#:     be tried from first to last until either a driver loads or no entries
+#:     remain. See :ref:`guide-audio-driver-order` for more information.
 #:
-#:     * xaudio2, the Windows Xaudio2 audio module (Windows only)
-#:     * directsound, the Windows DirectSound audio module (Windows only)
-#:     * pulse, the PulseAudio module (Linux only)
-#:     * openal, the OpenAL audio module
-#:     * silent, no audio
+#:     Valid driver names are:
+#:
+#:     * ``'xaudio2'``, the Windows Xaudio2 audio module (Windows only)
+#:     * ``'directsound'``, the Windows DirectSound audio module (Windows only)
+#:     * ``'pulse'``, the :ref:`guide-audio-driver-pulseaudio` module
+#:        (Linux only, otherwise nearly ubiquitous. Limited features; use
+#:        ``'openal'`` for more.)
+#:     * ``'openal'``, the :ref:`guide-audio-driver-openal` audio module
+#:       (A library may need to be installed on Windows and Linux)
+#:     * ``'silent'``, no audio
+#:
 #: debug_lib
 #:     If True, prints the path of each dynamic library loaded.
 #: debug_gl
@@ -168,20 +177,17 @@ _option_types = {
 }
 
 
-for key in options:
-    """Read defaults for options from environment"""
-    assert key in _option_types, f"Option '{key}' must have a type set in _option_types."
-    env = f'PYGLET_{key.upper()}'
-    try:
-        value = os.environ[env]
-        if _option_types[key] is tuple:
-            options[key] = value.split(',')
-        elif _option_types[key] is bool:
-            options[key] = value in ('true', 'TRUE', 'True', '1')
-        elif _option_types[key] is int:
-            options[key] = int(value)
-    except KeyError:
-        pass
+for _key in options:
+    """Check Environment Variables for pyglet options"""
+    assert _key in _option_types, f"Option '{_key}' must have a type set in _option_types."
+
+    if _value := os.environ.get(f'PYGLET_{_key.upper()}'):
+        if _option_types[_key] is tuple:
+            options[_key] = _value.split(',')
+        elif _option_types[_key] is bool:
+            options[_key] = _value in ('true', 'TRUE', 'True', '1')
+        elif _option_types[_key] is int:
+            options[_key] = int(_value)
 
 
 if compat_platform == 'cygwin':
@@ -190,15 +196,19 @@ if compat_platform == 'cygwin':
     # DirectSound support.
     import ctypes
 
-    ctypes.windll = ctypes.cdll
-    ctypes.oledll = ctypes.cdll
+    ctypes.windll = ctypes.cdll  # type: ignore
+    ctypes.oledll = ctypes.cdll  # type: ignore
     ctypes.WINFUNCTYPE = ctypes.CFUNCTYPE
-    ctypes.HRESULT = ctypes.c_long
+    ctypes.HRESULT = ctypes.c_long  # type: ignore
 
 # Call tracing
 # ------------
 
-_trace_filename_abbreviations = {}
+_trace_filename_abbreviations: Dict[str, str] = {}
+_trace_thread_count = 0
+_trace_args = options['debug_trace_args']
+_trace_depth = options['debug_trace_depth']
+_trace_flush = options['debug_trace_flush']
 
 
 def _trace_repr(value, size=40):
@@ -209,7 +219,7 @@ def _trace_repr(value, size=40):
 
 
 def _trace_frame(thread, frame, indent):
-    from pyglet import lib
+
     if frame.f_code is lib._TraceFunction.__call__.__code__:
         is_ctypes = True
         func = frame.f_locals['self']._func
@@ -226,13 +236,13 @@ def _trace_frame(thread, frame, indent):
             filename = _trace_filename_abbreviations[path]
         except KeyError:
             # Trim path down
-            dir = ''
+            directory = ''
             path, filename = os.path.split(path)
-            while len(dir + filename) < 30:
-                filename = os.path.join(dir, filename)
-                path, dir = os.path.split(path)
-                if not dir:
-                    filename = os.path.join('', filename)
+
+            while len(directory + filename) < 30:
+                filename = os.path.join(directory, filename)
+                path, directory = os.path.split(path)
+                if not directory:
                     break
             else:
                 filename = os.path.join('...', filename)
@@ -284,21 +294,13 @@ def _install_trace():
     _trace_thread_count += 1
 
 
-_trace_thread_count = 0
-_trace_args = options['debug_trace_args']
-_trace_depth = options['debug_trace_depth']
-_trace_flush = options['debug_trace_flush']
-if options['debug_trace']:
-    _install_trace()
-
-
 # Lazy loading
 # ------------
 
 class _ModuleProxy:
     _module = None
 
-    def __init__(self, name):
+    def __init__(self, name: str):
         self.__dict__['_module_name'] = name
 
     def __getattr__(self, name):
@@ -330,8 +332,7 @@ class _ModuleProxy:
             setattr(module, name, value)
 
 
-# Lazily load all modules, except if performing
-# type checking or code inspection.
+# Lazily load all modules, except if performing type checking or code inspection.
 if TYPE_CHECKING:
     from . import app
     from . import canvas
@@ -354,23 +355,27 @@ if TYPE_CHECKING:
     from . import text
     from . import window
 else:
-    app = _ModuleProxy('app')
-    canvas = _ModuleProxy('canvas')
-    clock = _ModuleProxy('clock')
-    customtypes = _ModuleProxy('customtypes')
-    event = _ModuleProxy('event')
-    font = _ModuleProxy('font')
-    gl = _ModuleProxy('gl')
-    graphics = _ModuleProxy('graphics')
-    gui = _ModuleProxy('gui')
-    image = _ModuleProxy('image')
-    input = _ModuleProxy('input')
-    lib = _ModuleProxy('lib')
-    math = _ModuleProxy('math')
-    media = _ModuleProxy('media')
-    model = _ModuleProxy('model')
-    resource = _ModuleProxy('resource')
-    sprite = _ModuleProxy('sprite')
-    shapes = _ModuleProxy('shapes')
-    text = _ModuleProxy('text')
-    window = _ModuleProxy('window')
+    app = _ModuleProxy('app')  # type: ignore
+    canvas = _ModuleProxy('canvas')  # type: ignore
+    clock = _ModuleProxy('clock')  # type: ignore
+    customtypes = _ModuleProxy('customtypes')  # type: ignore
+    event = _ModuleProxy('event')  # type: ignore
+    font = _ModuleProxy('font')  # type: ignore
+    gl = _ModuleProxy('gl')  # type: ignore
+    graphics = _ModuleProxy('graphics')  # type: ignore
+    gui = _ModuleProxy('gui')  # type: ignore
+    image = _ModuleProxy('image')  # type: ignore
+    input = _ModuleProxy('input')  # type: ignore
+    lib = _ModuleProxy('lib')  # type: ignore
+    math = _ModuleProxy('math')  # type: ignore
+    media = _ModuleProxy('media')  # type: ignore
+    model = _ModuleProxy('model')  # type: ignore
+    resource = _ModuleProxy('resource')  # type: ignore
+    sprite = _ModuleProxy('sprite')  # type: ignore
+    shapes = _ModuleProxy('shapes')  # type: ignore
+    text = _ModuleProxy('text')  # type: ignore
+    window = _ModuleProxy('window')  # type: ignore
+
+# Call after creating proxies:
+if options['debug_trace']:
+    _install_trace()

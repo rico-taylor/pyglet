@@ -1,3 +1,5 @@
+import pyglet
+
 from pyglet.gl import *
 
 
@@ -12,7 +14,7 @@ class Renderbuffer:
     """OpenGL Renderbuffer Object"""
 
     def __init__(self, width, height, internal_format, samples=1):
-        """Create an instance of a Renderbuffer object."""
+        self._context = pyglet.gl.current_context
         self._id = GLuint()
         self._width = width
         self._height = height
@@ -49,28 +51,27 @@ class Renderbuffer:
 
     def delete(self):
         glDeleteRenderbuffers(1, self._id)
+        self._id = None
 
     def __del__(self):
-        try:
-            glDeleteRenderbuffers(1, self._id)
-        # Python interpreter is shutting down:
-        except Exception:
-            pass
+        if self._id is not None:
+            try:
+                self._context.delete_renderbuffer(self._id.value)
+                self._id = None
+            except (AttributeError, ImportError):
+                pass  # Interpreter is shutting down
 
     def __repr__(self):
         return "{}(id={})".format(self.__class__.__name__, self._id.value)
 
 
 class Framebuffer:
-    """OpenGL Framebuffer Object"""
+    """OpenGL Framebuffer Object
 
-    def __init__(self, target=GL_FRAMEBUFFER):
-        """Create an OpenGL Framebuffer object.
-
-        :rtype: :py:class:`~pyglet.image.Framebuffer`
-
-        .. versionadded:: 2.0
-        """
+    .. versionadded:: 2.0
+    """
+    def __init__(self, target=GL_FRAMEBUFFER) -> 'Framebuffer':
+        self._context = pyglet.gl.current_context
         self._id = GLuint()
         glGenFramebuffers(1, self._id)
         self._attachment_types = 0
@@ -80,6 +81,7 @@ class Framebuffer:
 
     @property
     def id(self):
+        """The Framebuffer id"""
         return self._id.value
 
     @property
@@ -89,33 +91,58 @@ class Framebuffer:
 
     @property
     def height(self):
-        """The width of the widest attachment."""
+        """The height of the tallest attachment."""
         return self._height
 
     def bind(self):
+        """Bind the Framebuffer
+
+        This ctivates it as the current drawing target.
+        """
         glBindFramebuffer(self.target, self._id)
 
     def unbind(self):
+        """Unbind the Framebuffer
+
+        Unbind should be called to prevent further rendering
+        to the framebuffer, or if you wish to access data
+        from its Texture atachments.
+        """
         glBindFramebuffer(self.target, 0)
 
     def clear(self):
+        """Clear the attachments"""
         if self._attachment_types:
             self.bind()
             glClear(self._attachment_types)
             self.unbind()
 
     def delete(self):
-        try:
-            glDeleteFramebuffers(1, self._id)
-        except Exception:
-            pass
+        """Explicitly delete the Framebuffer."""
+        glDeleteFramebuffers(1, self._id)
+        self._id = None
+
+    def __del__(self):
+        if self._id is not None:
+            try:
+                self._context.delete_framebuffer(self._id.value)
+                self._id = None
+            except (AttributeError, ImportError):
+                pass  # Interpreter is shutting down
 
     @property
-    def is_complete(self):
+    def is_complete(self) -> bool:
+        """True if the framebuffer is 'complete', else False."""
         return glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE
 
     @staticmethod
-    def get_status():
+    def get_status() -> str:
+        """Get the current Framebuffer status, as a string.
+
+        If `Framebuffer.is_complete` is `False`, this method
+        can be used for more information. It will return a
+        string with the OpenGL reported status.
+        """
         states = {GL_FRAMEBUFFER_UNSUPPORTED: "Framebuffer unsupported. Try another format.",
                   GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT: "Framebuffer incomplete attachment.",
                   GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT: "Framebuffer missing attachment.",
@@ -147,7 +174,6 @@ class Framebuffer:
         """
         self.bind()
         glFramebufferTexture(target, attachment, texture.id, texture.level)
-        # glFramebufferTexture2D(target, attachment, texture.target, texture.id, texture.level)
         self._attachment_types |= attachment
         self._width = max(texture.width, self._width)
         self._height = max(texture.height, self._height)
@@ -181,7 +207,7 @@ class Framebuffer:
         self.unbind()
 
     def attach_renderbuffer(self, renderbuffer, target=GL_FRAMEBUFFER, attachment=GL_COLOR_ATTACHMENT0):
-        """"Attach a Renderbuffer to the Framebuffer
+        """Attach a Renderbuffer to the Framebuffer
 
         :Parameters:
             `renderbuffer` : pyglet.image.Renderbuffer
@@ -203,12 +229,5 @@ class Framebuffer:
         self._height = max(renderbuffer.height, self._height)
         self.unbind()
 
-    def __del__(self):
-        try:
-            glDeleteFramebuffers(1, self._id)
-        # Python interpreter is shutting down:
-        except Exception:
-            pass
-
     def __repr__(self):
-        return "{}(id={})".format(self.__class__.__name__, self._id.value)
+        return f"{self.__class__.__name__}(id={self._id.value})"
