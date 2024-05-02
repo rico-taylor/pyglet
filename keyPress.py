@@ -14,7 +14,7 @@ def on_key_press(symbol,modifiers):
   print("A Key Was Pressed")
   press = True
 
-@window.event
+@window.event 
 def on_draw():
   window.clear()
   string = ''
